@@ -1,0 +1,21 @@
+{
+  "name": "kaitai_struct_node_example",
+  "version": "1.0.0",
+  "description": "Kaitai Struct usage example",
+  "main": "index.js",
+  "dependencies": {
+    "kaitai-struct": "^0.8.0-SNAPSHOT.2",
+    "kaitai-struct-compiler": "^0.8.0-SNAPSHOT.20170808.173516",
+    "pako": "^1.0.5",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": {
+    "name": "Kaitai team",
+    "url": "https://github.com/orgs/kaitai-io/people"
+  },
+  "license": "MIT"
+}
