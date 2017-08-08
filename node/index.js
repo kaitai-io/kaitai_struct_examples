@@ -9,8 +9,8 @@ console.log("Welcome to the Kaitai Struct example node.js app!");
 console.log();
 
 showCompilerInfo();
-example_generateAllParsers();
-example_parseZipFile();
+[example_generateAllParsers, example_parseZipFile, example_import]
+    .reduce(function(x,y){ return x.then(y); }, Promise.resolve());
 
 function showCompilerInfo() {
     var compiler = new KaitaiStructCompiler();
@@ -70,9 +70,14 @@ function example_parseZipFile() {
 
     console.log("  Generating JS .zip parser...");
     var compiler = new KaitaiStructCompiler();
-    compiler.compile("javascript", zipKsyContent, null, false).then(function(files) {
-        var parserCode = files["Zip.js"];
-        eval(parserCode);
+    return compiler.compile("javascript", zipKsyContent, null, false).then(function(files) {
+        Object.keys(files).forEach(function(fileName) {
+            fs.writeFileSync("output/" + fileName, files[fileName]);
+        });
+        
+        // workaround for bug described here: https://github.com/kaitai-io/kaitai_struct/issues/180
+        global.KaitaiStream = KaitaiStream;
+        var Zip = require("./output/Zip");
         
         console.log("  Parsing file...");
         var zip = new Zip(new KaitaiStream(inputBinary, 0));
@@ -91,6 +96,45 @@ function example_parseZipFile() {
                }
            }
         });
+        
+        console.log();
+    });
+}
+
+function example_import() {
+    console.log("========================");
+    console.log("Example: import handling");
+    console.log("========================");
+    
+    console.log("  Loading import_outer.ksy...");
+    var ksyContent = yamljs.parseFile("import_outer.ksy");
+    
+    console.log("  Loading input file (sample1.zip)...");
+    var inputBinary = fs.readFileSync("sample1.zip");
+    
+    var yamlImporter = {
+        importYaml: function(name, mode) {
+            console.log("  -> Import yaml called with name '" + name + "' and mode '" + mode + "'.");
+            return Promise.resolve(yamljs.parseFile(name + ".ksy"));
+        }
+    };
+    
+    console.log("  Generating JS parser...");
+    var compiler = new KaitaiStructCompiler();
+    return compiler.compile("javascript", ksyContent, yamlImporter, false).then(function(files) {
+        Object.keys(files).forEach(function(fileName) {
+            fs.writeFileSync("output/" + fileName, files[fileName]);
+        });
+
+        var ImportOuter = require("./output/ImportOuter");
+        
+        console.log("  Parsing file...");
+        var parsed = new ImportOuter(new KaitaiStream(inputBinary, 0));
+        console.log('    ' + JSON.stringify(parsed, function(key, value){
+            return key[0] === "_" ? undefined : value;
+        }, 4).replace(/\n/g, '\n    '));
+        
+        console.log();
     });
 }
 
