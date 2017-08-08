@@ -27,7 +27,7 @@ function example_generateAllParsers() {
     console.log("=============================");
     
     console.log("  Loading zip.ksy...");
-    var zipKsyContent = yamljs.parseFile("zip.ksy");
+    var zipKsyContent = yamljs.parseFile("formats/zip.ksy");
 
     mkdir("output");
     mkdir("output/src"); // for Java code
@@ -63,10 +63,10 @@ function example_parseZipFile() {
     console.log("===========================");
     
     console.log("  Loading zip.ksy...");
-    var zipKsyContent = yamljs.parseFile("zip.ksy");
+    var zipKsyContent = yamljs.parseFile("formats/zip.ksy");
     
     console.log("  Loading input file (sample1.zip)...");
-    var inputBinary = fs.readFileSync("sample1.zip");
+    var inputBinary = fs.readFileSync("inputs/sample1.zip");
 
     console.log("  Generating JS .zip parser...");
     var compiler = new KaitaiStructCompiler();
@@ -107,15 +107,15 @@ function example_import() {
     console.log("========================");
     
     console.log("  Loading import_outer.ksy...");
-    var ksyContent = yamljs.parseFile("import_outer.ksy");
+    var ksyContent = yamljs.parseFile("formats/import_outer.ksy");
     
     console.log("  Loading input file (sample1.zip)...");
-    var inputBinary = fs.readFileSync("sample1.zip");
+    var inputBinary = fs.readFileSync("inputs/sample1.zip");
     
     var yamlImporter = {
         importYaml: function(name, mode) {
             console.log("  -> Import yaml called with name '" + name + "' and mode '" + mode + "'.");
-            return Promise.resolve(yamljs.parseFile(name + ".ksy"));
+            return Promise.resolve(yamljs.parseFile("formats/" + name + ".ksy"));
         }
     };
     
