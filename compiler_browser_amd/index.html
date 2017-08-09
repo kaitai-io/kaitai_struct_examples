@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Kaitai Struct Compiler browser example</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="http://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="node_modules/yamljs/dist/yaml.min.js"></script>
+    <style>
+        pre { margin:0; padding:0 }
+        .code { display:none; height:500px; overflow-y:auto; margin-left:30px; background:#f8f8f8 }
+        .code_header { margin-left:30px; background:#eeeeff; padding:5px; border-radius:5px; margin-bottom:5px; margin-top:5px; cursor:pointer }
+        .code_header span { font-size:0.8em; color:#888 }
+    </style>
+</head>
+<body>
+    <pre id="result"></pre>
+    <script>
+        requirejs.config({ 
+            paths: {
+                'kaitai-struct-compiler': 'node_modules/kaitai-struct-compiler/kaitai-struct-compiler',
+                'kaitai-struct': 'node_modules/kaitai-struct',
+                'pako': 'node_modules/pako/dist/pako_inflate.min'
+            }
+        });
+        
+        require(['kaitai-struct-compiler', 'kaitai-struct/KaitaiStream', 'pako'], function(KaitaiStructCompiler, KaitaiStream, pako){
+            function log(text){
+                $(document.body).append("<pre>" + (text||"\n ") + "</pre>");
+            }
+            
+            function logFile(fn, content){
+                var header = $("<div class='code_header'> &gt; " + fn + " <span>(click to open)</span></div>");
+                var contentPre = $("<pre class='code'>" + content + "</pre>");
+                $(document.body).append(header).append(contentPre);
+                header.on('click', function(){
+                    console.log('toggle');
+                    contentPre.toggle();
+                });
+            }
+        
+            log("Welcome to the Kaitai Struct example browser app!");
+            log();
+            
+            function asyncForeach(array) {
+                return array.reduce(function(x,y){ return x.then(y); }, Promise.resolve());
+            }
+
+            showCompilerInfo();
+            // TODO: import test is broken
+            asyncForeach([example_generateAllParsers, example_parseZipFile/*, example_import*/]);
+
+            function readFile(fn, isText) {
+                return new Promise(function(resolve, reject){
+                    var oReq = new XMLHttpRequest();
+                    oReq.onload = function(e) { resolve(oReq.response); }
+                    oReq.onerror = function(e) { reject(e); }
+                    oReq.open("GET", fn);
+                    oReq.responseType = isText ? "text" : "arraybuffer";
+                    oReq.send();
+                });
+            }
+                
+            function showCompilerInfo() {
+                var compiler = new KaitaiStructCompiler();
+                log("Kaitai Struct Compiler information:");
+                log(" - version: " + compiler.version);
+                log(" - build date: " + compiler.buildDate);
+                log(" - supported languages: " + compiler.languages.join(", "));
+                log();
+            }
+
+            function example_generateAllParsers() {
+                log("=============================");
+                log("Example: generate all parsers");
+                log("=============================");
+                
+                log("  Loading zip.ksy...");
+                return readFile("formats/zip.ksy", true).then(function(zipKsy){
+                    var zipKsyContent = YAML.parse(zipKsy);
+
+                    var debugSupported = ["java", "javascript", "ruby"];
+                    var disabledLanguages = ["go"];
+
+                    var compileCbs = [];
+                    
+                    var compiler = new KaitaiStructCompiler();
+                    compiler.languages.forEach(function(lang) {
+                        [false, true].forEach(function(isDebug){
+                            if (isDebug && debugSupported.indexOf(lang) === -1 || disabledLanguages.indexOf(lang) !== -1) return;
+
+                            compileCbs.push(function(){
+                                log("  Generating " + lang + (isDebug ? " (debug)" : "") + " code...");
+
+                                return compiler.compile(lang, zipKsyContent, null, isDebug ? true : false).then(function(files) {
+                                    Object.keys(files).forEach(function(fileName) {
+                                        var fileContent = files[fileName];
+                                        var outFn = isDebug ? fileName.replace(".", ".debug.") : fileName;
+                                        logFile(outFn, fileContent);
+                                    });
+                                }, function(err){
+                                    log("  Error while generating " + lang + (isDebug ? " (debug)" : "") + " code", err);
+                                });
+                            });
+                        });
+                    });
+                    
+                    return asyncForeach(compileCbs).then(() => log());
+                });
+            }
+
+            function example_parseZipFile() {
+                log("===========================");
+                log("Example: parsing a zip file");
+                log("===========================");
+                
+                log("  Loading zip.ksy...");
+                return readFile("formats/zip.ksy", true).then(function(zipKsy){
+                    var zipKsyContent = YAML.parse(zipKsy);
+                    
+                    log("  Loading input file (sample1.zip)...");
+                    return readFile("inputs/sample1.zip").then(function(inputBinary){
+                        log("  Generating JS .zip parser...");
+                        var compiler = new KaitaiStructCompiler();
+                        return compiler.compile("javascript", zipKsyContent, null, false).then(function(files) {
+                            eval(files["Zip.js"]);
+                            
+                            log("  Parsing file...");
+                            var zip = new Zip(new KaitaiStream(inputBinary, 0));
+                            
+                            log();
+                            log("  Zip contents:");
+                            zip.sections.forEach(function(section) {
+                               if (section.body instanceof Zip.LocalFile) {
+                                   var hdr = section.body.header;
+                                   var isFolder = hdr.fileName.charAt(hdr.fileName.length - 1) === '/';
+                                   log("   - [" + (isFolder ? "D" : "F") + "] " + hdr.fileName + (isFolder ? "" : " (" + hdr.uncompressedSize + " bytes)"));
+                                   
+                                   if(!isFolder) {
+                                       var decompressed = pako.inflate(section.body.body, { raw: true, to: 'string' });
+                                       log("     - contents: '" + decompressed + "'");
+                                   }
+                               }
+                            });
+                            
+                            log();
+                        });
+                    });
+                });
+            }
+
+            function example_import() {
+                log("========================");
+                log("Example: import handling");
+                log("========================");
+                
+                log("  Loading import_outer.ksy...");
+                return readFile("formats/import_outer.ksy", true).then(function(ksyContentStr) {
+                    var ksyContent = YAML.parse(ksyContentStr);
+
+                    log("  Loading input file (sample1.zip)...");
+                    return readFile("inputs/sample1.zip").then(function(inputBinary) {                
+                        var yamlImporter = {
+                            importYaml: function(name, mode) {
+                                log("  -> Import yaml called with name '" + name + "' and mode '" + mode + "'.");
+                                return readFile("formats/" + name + ".ksy", true).then(function(importedKsyStr){
+                                    return YAML.parse(importedKsyStr);
+                                });
+                            }
+                        };
+                        
+                        log("  Generating JS parser...");
+                        var compiler = new KaitaiStructCompiler();
+                        return compiler.compile("javascript", ksyContent, yamlImporter, false).then(function(files) {
+                            var fileNames = Object.keys(files);
+                            log("  Loading parsers... (" + fileNames.join(", ") + ")");
+                            for (var iFn = 0; iFn < fileNames.length; iFn++)
+                                eval(files[fileNames[iFn]]);
+                            
+                            log("  Parsing file...");
+                            var parsed = new ImportOuter(new KaitaiStream(inputBinary, 0));
+                            log('    ' + JSON.stringify(parsed, function(key, value){
+                                return key[0] === "_" ? undefined : value;
+                            }, 4).replace(/\n/g, '\n    '));
+                            
+                            log();
+                        });
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>
